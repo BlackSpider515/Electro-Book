@@ -1,0 +1,171 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { CalendarDays, Loader2, Save } from 'lucide-react'
+import { Modal } from './Modal'
+import type { Assignment, Group, NewAssignment } from '../lib/types'
+import { backend } from '../lib/api'
+import { todayISO } from '../lib/format'
+import { useToast } from '../context/ToastContext'
+
+interface AssignmentDialogProps {
+  open: boolean
+  groups: Group[]
+  defaultGroup: string
+  assignment: Assignment | null
+  onClose: () => void
+  onSaved: (assignment: Assignment) => void
+}
+
+export function AssignmentDialog({
+  open,
+  groups,
+  defaultGroup,
+  assignment,
+  onClose,
+  onSaved,
+}: AssignmentDialogProps) {
+  const toast = useToast()
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [groupName, setGroupName] = useState(defaultGroup)
+  const [date, setDate] = useState(todayISO())
+  const [lesson, setLesson] = useState(1)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    setError('')
+    setBusy(false)
+    if (assignment) {
+      setTitle(assignment.title)
+      setDescription(assignment.description)
+      setGroupName(assignment.group_name)
+      setDate(assignment.assigned_date)
+      setLesson(assignment.lesson_number)
+    } else {
+      setTitle('')
+      setDescription('')
+      setGroupName(defaultGroup || groups[0]?.name || '')
+      setDate(todayISO())
+      setLesson(1)
+    }
+  }, [open, assignment, defaultGroup, groups])
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setError('')
+    if (!title.trim()) {
+      setError('Введите название задания')
+      return
+    }
+    if (!groupName) {
+      setError('Выберите группу')
+      return
+    }
+    setBusy(true)
+    const payload: NewAssignment = {
+      title: title.trim(),
+      description: description.trim(),
+      group_name: groupName,
+      assigned_date: date || todayISO(),
+      lesson_number: lesson,
+    }
+    try {
+      const value = assignment
+        ? await backend.assignments.update(assignment.id, payload)
+        : await backend.assignments.create(payload)
+      toast.success(assignment ? 'Задание обновлено' : 'Задание добавлено')
+      onSaved(value)
+      onClose()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={assignment ? 'Редактировать задание' : 'Новое задание'}
+      subtitle={
+        assignment
+          ? 'Изменения появятся в журнале группы и у студентов'
+          : 'Задание появится в журнале выбранной группы'
+      }
+      size="md"
+    >
+      <form className="form" onSubmit={submit}>
+        {error ? <div className="error-box">{error}</div> : null}
+        <label className="field">
+          <span>Название задания</span>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Например, ПЗ 5. Навигация в приложении"
+            data-testid="assignment-title"
+            autoFocus
+          />
+        </label>
+        <label className="field">
+          <span>Описание и требования</span>
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            rows={4}
+            placeholder="Что нужно сделать, какие файлы прикрепить…"
+            data-testid="assignment-description"
+          />
+        </label>
+        <div className="form-row">
+          <label className="field">
+            <span>Группа</span>
+            <select
+              value={groupName}
+              onChange={(event) => setGroupName(event.target.value)}
+              data-testid="assignment-group"
+            >
+              {groups.map((group) => (
+                <option key={group.name} value={group.name}>
+                  Группа {group.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Дата выдачи</span>
+            <div className="input-with-icon">
+              <CalendarDays size={16} />
+              <input
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                data-testid="assignment-date"
+              />
+            </div>
+          </label>
+          <label className="field field--narrow">
+            <span>Пара</span>
+            <select value={lesson} onChange={(event) => setLesson(Number(event.target.value))}>
+              {[1, 2, 3, 4].map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn--ghost" onClick={onClose} disabled={busy}>
+            Отмена
+          </button>
+          <button type="submit" className="btn btn--primary" disabled={busy} data-testid="assignment-save">
+            {busy ? <Loader2 className="spin" size={17} /> : <Save size={17} />}
+            {busy ? 'Сохраняем…' : assignment ? 'Сохранить' : 'Добавить задание'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
