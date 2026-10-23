@@ -147,8 +147,28 @@ async function storeFile(
   }
 }
 
-function rowFor(submission: Submission, db: ReturnType<typeof loadDb>): WorkRow | null {
-  const assignment = db.assignments.find((a) => a.id === submission.assignment_id)
+function latestVersionTime(db: ReturnType<typeof loadDb>, submissionId: string): number {
+  let latest = 0
+  for (const version of db.versions) {
+    if (version.submission_id !== submissionId) continue
+    const time = new Date(version.created_at).getTime()
+    if (!Number.isNaN(time) && time > latest) latest = time
+  }
+  return latest
+}
+
+function activeAnnotationCount(db: ReturnType<typeof loadDb>, submissionId: string): number {
+  const latestVersion = latestVersionTime(db, submissionId)
+  let count = 0
+  for (const annotation of db.annotations) {
+    if (annotation.submission_id !== submissionId) continue
+    const time = new Date(annotation.created_at).getTime()
+    if (Number.isNaN(time) || time > latestVersion) count += 1
+  }
+  return count
+}
+
+function rowFor(submission: Submission, db: ReturnType<typeof loadDb>): WorkRow | null {  const assignment = db.assignments.find((a) => a.id === submission.assignment_id)
   const student = db.users.find((u) => u.profile.id === submission.student_id)?.profile
   if (!assignment || !student) return null
   return {
@@ -408,6 +428,7 @@ export const demoBackend: Backend = {
         grade: s.grade,
         status: s.status,
         submitted_at: s.submitted_at,
+        annotation_count: s.grade == null ? activeAnnotationCount(db, s.id) : 0,
       }))
     return { assignments, students, entries }
   },
@@ -507,6 +528,15 @@ export const demoBackend: Backend = {
       const assignment = db.assignments.find((a) => a.id === submission.assignment_id)
       const message = validateGrade(assignment?.grade_type, grade)
       if (message) throw new Error(message)
+      if (
+        grade != null &&
+        submission.grade == null &&
+        activeAnnotationCount(db, submissionId) > 0
+      ) {
+        throw new Error(
+          'Сначала исправьте замечания: пока они активны, оценку ставить нельзя',
+        )
+      }
       submission.grade = grade
       submission.status = grade != null ? 'reviewed' : 'submitted'
       submission.reviewed_at = grade != null ? new Date().toISOString() : null

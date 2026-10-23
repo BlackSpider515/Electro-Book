@@ -271,6 +271,12 @@ export function JournalTable({
                   const canSubmit = !isAdmin && isOwn && !entry
                   const overdue = isOverdue(assignment.due_at)
                   const showUrgent = overdue && !entry && (isAdmin || isOwn)
+                  const hasRemarks = Boolean(
+                    entry &&
+                      entry.grade == null &&
+                      entry.annotation_count > 0 &&
+                      (isAdmin || isOwn),
+                  )
                   return (
                     <td
                       key={student.id}
@@ -281,22 +287,40 @@ export function JournalTable({
                       title={
                         showUrgent
                           ? `Дедлайн прошёл: ${formatDateTime(assignment.due_at)}`
-                          : isAdmin
-                            ? 'Изменить отметку'
-                            : canSubmit
-                              ? 'Сдать работу'
-                              : entry?.grade != null
-                                ? `Оценка: ${gradeLabel(
-                                    assignment.grade_type,
-                                    entry.grade,
-                                  )}`
-                                : entry
-                                  ? 'Работа сдана'
-                                  : ''
+                          : hasRemarks
+                            ? `Замечаний: ${entry?.annotation_count ?? 0} — нужно исправить`
+                            : isAdmin
+                              ? 'Изменить отметку'
+                              : canSubmit
+                                ? 'Сдать работу'
+                                : entry?.grade != null
+                                  ? `Оценка: ${gradeLabel(
+                                      assignment.grade_type,
+                                      entry.grade,
+                                    )}`
+                                  : entry
+                                    ? 'Работа сдана'
+                                    : ''
                       }
                     >
                       {entry ? (
-                        entry.grade != null ? (
+                        hasRemarks ? (
+                          <span className="journal-cell__status">
+                            {entry.grade != null ? (
+                              <GradeBadge
+                                grade={entry.grade}
+                                type={assignment.grade_type}
+                                variant="cell"
+                              />
+                            ) : null}
+                            <span
+                              className="revise-cell"
+                              data-testid={`revise-cell-${assignment.id}-${student.id}`}
+                            >
+                              Исправить
+                            </span>
+                          </span>
+                        ) : entry.grade != null ? (
                           <GradeBadge
                             grade={entry.grade}
                             type={assignment.grade_type}
@@ -371,6 +395,9 @@ export function JournalTable({
       <footer className="journal-legend">
         <span>
           <b className="mark-plus">+</b> сдано
+        </span>
+        <span>
+          <span className="revise-cell">Исправить</span> есть замечания
         </span>
         <span>
           <GradeBadge grade={5} type="stars" size={13} variant="cell" /> оценки 1–5

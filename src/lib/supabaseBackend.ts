@@ -442,7 +442,65 @@ export const supabaseBackend: Backend = {
         .select('submission_id, assignment_id, student_id, grade, status, submitted_at')
         .in('assignment_id', assignmentIds)
       if (error) throw new Error(error.message)
-      entries = (data ?? []) as JournalData['entries']
+      const rows = (data ?? []) as Array<
+        Omit<JournalData['entries'][number], 'annotation_count'>
+      >
+      entries = rows.map((row) => ({ ...row, annotation_count: 0 }))
+
+      // RLS отдаёт студенту только его замечания, преподавателю — все.
+      const submissionIds = rows
+        .map((row) => row.submission_id)
+        .filter((id): id is string => Boolean(id))
+      if (submissionIds.length) {
+        const counts = new Map<string, number>()
+        // Режем длинный список id на части, чтобы не упереться в лимит длины URL.
+        for (let index = 0; index < submissionIds.length; index += 100) {
+          const chunk = submissionIds.slice(index, index + 100)
+          const [versionsResult, annotationsResult] = await Promise.all([
+            db
+              .from('submission_versions')
+              .select('submission_id, created_at')
+              .in('submission_id', chunk),
+            db
+              .from('annotations')
+              .select('submission_id, created_at')
+              .in('submission_id', chunk),
+          ])
+          if (versionsResult.error) throw new Error(versionsResult.error.message)
+          if (annotationsResult.error) throw new Error(annotationsResult.error.message)
+
+          const latestVersion = new Map<string, number>()
+          for (const version of (versionsResult.data ?? []) as {
+            submission_id: string
+            created_at: string
+          }[]) {
+            const time = new Date(version.created_at).getTime()
+            if (Number.isNaN(time)) continue
+            const current = latestVersion.get(version.submission_id) ?? 0
+            if (time > current) latestVersion.set(version.submission_id, time)
+          }
+
+          // «Исправить» показываем только для замечаний, оставленных после
+          // последней загруженной версии. Новая версия автоматически снимает статус.
+          for (const annotation of (annotationsResult.data ?? []) as {
+            submission_id: string
+            created_at: string
+          }[]) {
+            const time = new Date(annotation.created_at).getTime()
+            const versionTime = latestVersion.get(annotation.submission_id) ?? 0
+            if (Number.isNaN(time) || time > versionTime) {
+              counts.set(annotation.submission_id, (counts.get(annotation.submission_id) ?? 0) + 1)
+            }
+          }
+        }
+        entries = entries.map((entry) => ({
+          ...entry,
+          annotation_count:
+            entry.grade == null && entry.submission_id
+              ? counts.get(entry.submission_id) ?? 0
+              : 0,
+        }))
+      }
     }
 
     return {
@@ -537,7 +595,7 @@ export const supabaseBackend: Backend = {
       if (grade != null) {
         const { data: submission, error: submissionError } = await client()
           .from('submissions')
-          .select('assignment_id')
+          .select('assignment_id, grade')
           .eq('id', submissionId)
           .single()
         if (submissionError) throw new Error(submissionError.message)
@@ -552,6 +610,35 @@ export const supabaseBackend: Backend = {
           grade,
         )
         if (message) throw new Error(message)
+
+        // Блокируем только первую оценку. Если оценка уже стоит, преподаватель
+        // может её изменить или снять, даже если замечания остались.
+        if ((submission as { grade: number | null }).grade == null) {
+          const { data: lastVersion, error: versionError } = await client()
+            .from('submission_versions')
+            .select('created_at')
+            .eq('submission_id', submissionId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          if (versionError) throw new Error(versionError.message)
+
+          let annotationQuery = client()
+            .from('annotations')
+            .select('id', { count: 'exact', head: true })
+            .eq('submission_id', submissionId)
+          const latestVersionAt = (lastVersion as { created_at?: string } | null)?.created_at
+          if (latestVersionAt) {
+            annotationQuery = annotationQuery.gt('created_at', latestVersionAt)
+          }
+          const { count, error: annotationError } = await annotationQuery
+          if (annotationError) throw new Error(annotationError.message)
+          if ((count ?? 0) > 0) {
+            throw new Error(
+              'Сначала исправьте замечания: пока они активны, оценку ставить нельзя',
+            )
+          }
+        }
       }
       const { error } = await client()
         .from('submissions')

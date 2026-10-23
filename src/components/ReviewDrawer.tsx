@@ -255,6 +255,16 @@ export function ReviewDrawer({
   }, [open, submission?.id, submission?.grade])
 
   const gradeType = normalizeGradeType(meta?.gradeType)
+  const latestVersionAt = versions.reduce((latest, version) => {
+    const time = new Date(version.created_at).getTime()
+    return Number.isNaN(time) ? latest : Math.max(latest, time)
+  }, 0)
+  const activeAnnotations = annotations.filter((annotation) => {
+    const time = new Date(annotation.created_at).getTime()
+    return Number.isNaN(time) || time > latestVersionAt
+  })
+  const gradeLockedByRemarks =
+    mode === 'admin' && submission?.grade == null && activeAnnotations.length > 0
   const kind = submission ? fileKind(submission.original_name ?? '') : null
   const fileDeleted = Boolean(
     submission &&
@@ -319,6 +329,10 @@ export function ReviewDrawer({
 
   const setGrade = async (grade: number | null) => {
     if (!submission || gradeBusy) return
+    if (gradeLockedByRemarks && grade != null) {
+      toast.error('Сначала исправьте замечания: пока они активны, оценку ставить нельзя')
+      return
+    }
     const message = validateGrade(gradeType, grade)
     if (message) {
       toast.error(message)
@@ -623,6 +637,16 @@ export function ReviewDrawer({
                 </span>
               </div>
 
+              {gradeLockedByRemarks ? (
+                <div className="grade-lock-note" data-testid="grade-lock-remarks">
+                  <MessageSquareWarning size={15} />
+                  <span>
+                    Пока есть активные замечания, оценку ставить нельзя. Сначала студент
+                    должен загрузить исправленную версию.
+                  </span>
+                </div>
+              ) : null}
+
               {gradeType === 'pass_fail' ? (
                 <div className="grade-choice">
                   {mode === 'admin' ? (
@@ -633,7 +657,7 @@ export function ReviewDrawer({
                           submission.grade === 1 ? 'is-active' : ''
                         }`}
                         onClick={() => setGrade(1)}
-                        disabled={gradeBusy}
+                        disabled={gradeBusy || gradeLockedByRemarks}
                         data-testid="grade-pass"
                       >
                         <Check size={17} /> Зачёт
@@ -644,7 +668,7 @@ export function ReviewDrawer({
                           submission.grade === 0 ? 'is-active' : ''
                         }`}
                         onClick={() => setGrade(0)}
-                        disabled={gradeBusy}
+                        disabled={gradeBusy || gradeLockedByRemarks}
                         data-testid="grade-fail"
                       >
                         <X size={17} /> Незачёт
@@ -676,14 +700,14 @@ export function ReviewDrawer({
                         value={pointsDraft}
                         onChange={(event) => setPointsDraft(event.target.value)}
                         placeholder="0–100"
-                        disabled={gradeBusy}
+                        disabled={gradeBusy || gradeLockedByRemarks}
                         data-testid="points-grade-input"
                       />
                       <button
                         type="button"
                         className="btn btn--primary btn--sm"
                         onClick={savePointsGrade}
-                        disabled={gradeBusy}
+                        disabled={gradeBusy || gradeLockedByRemarks}
                         data-testid="save-points-grade"
                       >
                         {gradeBusy ? (
@@ -712,7 +736,9 @@ export function ReviewDrawer({
                 <div className="grade-card__stars">
                   <Stars
                     value={submission.grade}
-                    onChange={mode === 'admin' ? setGrade : undefined}
+                    onChange={
+                      mode === 'admin' && !gradeLockedByRemarks ? setGrade : undefined
+                    }
                     size={24}
                     showEmpty
                     label={
@@ -729,11 +755,13 @@ export function ReviewDrawer({
 
               {mode === 'admin' ? (
                 <p className="grade-card__hint">
-                  {gradeType === 'pass_fail'
-                    ? 'Выберите «Зачёт» или «Незачёт». После оценки работа блокируется для студента.'
-                    : gradeType === 'points'
-                      ? 'Введите целое число от 0 до 100 и нажмите «Сохранить». После оценки работа блокируется для студента.'
-                      : 'Нажмите на звезду, чтобы выставить оценку. Повторное нажатие на выбранную звезду снимает оценку. После оценки работа блокируется.'}
+                  {gradeLockedByRemarks
+                    ? 'Оценка станет доступна после загрузки студентом новой версии или после удаления замечаний.'
+                    : gradeType === 'pass_fail'
+                      ? 'Выберите «Зачёт» или «Незачёт». После оценки работа блокируется для студента.'
+                      : gradeType === 'points'
+                        ? 'Введите целое число от 0 до 100 и нажмите «Сохранить». После оценки работа блокируется для студента.'
+                        : 'Нажмите на звезду, чтобы выставить оценку. Повторное нажатие на выбранную звезду снимает оценку. После оценки работа блокируется.'}
                 </p>
               ) : (
                 <p className="grade-card__hint">

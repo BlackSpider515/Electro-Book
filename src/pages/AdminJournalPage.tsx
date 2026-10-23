@@ -146,6 +146,7 @@ export function AdminJournalPage() {
               grade: created.grade,
               status: created.status,
               submitted_at: created.submitted_at,
+              annotation_count: 0,
             },
           }
         : current,

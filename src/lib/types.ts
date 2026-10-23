@@ -91,6 +91,8 @@ export interface JournalEntry {
   grade: number | null
   status: SubmissionStatus | null
   submitted_at: string | null
+  /** Активные замечания: оставленные после последней загруженной версии. */
+  annotation_count: number
 }
 
 export interface JournalData {

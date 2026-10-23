@@ -102,6 +102,8 @@ create table if not exists public.annotations (
 );
 
 create index if not exists annotations_submission_idx on public.annotations (submission_id);
+create index if not exists annotations_submission_created_idx
+  on public.annotations (submission_id, created_at);
 
 -- ---------- updated_at ----------
 create or replace function public.touch_updated_at()
