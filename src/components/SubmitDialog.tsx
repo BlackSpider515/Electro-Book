@@ -122,7 +122,10 @@ export function SubmitDialog({
             <div>
               <strong>Текущий файл</strong>
               <span>
-                {submission.original_name} · {formatSize(submission.size)}
+                {submission.original_name}
+                {submission.file_deleted_at
+                  ? ' · файл удалён после проверки'
+                  : ` · ${formatSize(submission.size)}`}
               </span>
             </div>
           </div>

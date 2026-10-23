@@ -16,6 +16,7 @@ import type { AnnotationInput, Backend, SubmissionFilters } from './backend'
 import { supabase, supabaseAnonKey, supabaseUrl } from './supabase'
 import { extensionOf, safeMime, sanitizeFileName } from './fileTypes'
 import { validateGrade } from './grades'
+import { retentionCutoff } from './retention'
 
 function client(): SupabaseClient {
   if (!supabase) throw new Error('Supabase не настроен')
@@ -163,6 +164,8 @@ async function storeSubmission(
     submitted_at: new Date().toISOString(),
     status: 'submitted' as const,
     version,
+    reviewed_at: null,
+    file_deleted_at: null,
   }
 
   let submission: Submission | null = null
@@ -552,7 +555,11 @@ export const supabaseBackend: Backend = {
       }
       const { error } = await client()
         .from('submissions')
-        .update({ grade, status: grade != null ? 'reviewed' : 'submitted' })
+        .update({
+          grade,
+          status: grade != null ? 'reviewed' : 'submitted',
+          reviewed_at: grade != null ? new Date().toISOString() : null,
+        })
         .eq('id', submissionId)
       if (error) throw new Error(error.message)
     },
@@ -634,6 +641,63 @@ export const supabaseBackend: Backend = {
       }
       const file = new File([text], submission.original_name as string, { type: 'text/plain' })
       return storeSubmission(profile, submission.assignment_id, file)
+    },
+    async cleanupReviewedFiles() {
+      await requireAdmin()
+      const db = client()
+      const cutoff = new Date(retentionCutoff()).toISOString()
+
+      const { data, error } = await db
+        .from('submissions')
+        .select('id, file_path')
+        .not('grade', 'is', null)
+        .not('reviewed_at', 'is', null)
+        .lte('reviewed_at', cutoff)
+        .is('file_deleted_at', null)
+      if (error) throw new Error(error.message)
+
+      const rows = (data ?? []) as { id: string; file_path: string | null }[]
+      if (!rows.length) return 0
+      const submissionIds = rows.map((row) => row.id)
+
+      const { data: versionData, error: versionError } = await db
+        .from('submission_versions')
+        .select('id, file_path')
+        .in('submission_id', submissionIds)
+      if (versionError) throw new Error(versionError.message)
+
+      const paths = [
+        ...new Set(
+          [
+            ...rows.map((row) => row.file_path),
+            ...((versionData ?? []) as { file_path: string | null }[]).map(
+              (version) => version.file_path,
+            ),
+          ].filter((path): path is string => Boolean(path)),
+        ),
+      ]
+
+      // Сначала удаляем объекты, затем помечаем строки. Если обновление не
+      // пройдёт, следующий запуск повторит попытку (повторное удаление безопасно).
+      if (paths.length) {
+        const { error: storageError } = await db.storage.from('submissions').remove(paths)
+        if (storageError) throw new Error(storageError.message)
+      }
+
+      const deletedAt = new Date().toISOString()
+      const { error: updateError } = await db
+        .from('submissions')
+        .update({ file_path: null, file_deleted_at: deletedAt })
+        .in('id', submissionIds)
+      if (updateError) throw new Error(updateError.message)
+
+      const { error: versionsError } = await db
+        .from('submission_versions')
+        .update({ file_path: null, file_deleted_at: deletedAt })
+        .in('submission_id', submissionIds)
+      if (versionsError) throw new Error(versionsError.message)
+
+      return submissionIds.length
     },
   },
 

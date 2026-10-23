@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock3,
   FileUp,
+  FileX,
   FolderOpen,
   MessageSquareWarning,
   RefreshCw,
@@ -230,13 +231,24 @@ export function StudentAssignmentsPage() {
                 {assignment.description ? <p>{assignment.description}</p> : null}
 
                 {submission ? (
-                  <div className="assignment-card__file">
-                    <FileUp size={15} />
+                  <div
+                    className={`assignment-card__file ${
+                      submission.file_deleted_at ? 'assignment-card__file--deleted' : ''
+                    }`}
+                  >
+                    {submission.file_deleted_at ? (
+                      <FileX size={15} />
+                    ) : (
+                      <FileUp size={15} />
+                    )}
                     <div>
                       <strong>{submission.original_name || 'Файл не прикреплён'}</strong>
                       <span>
-                        {formatSize(submission.size)} · сдано{' '}
-                        {formatDateTime(submission.submitted_at)}
+                        {submission.file_deleted_at
+                          ? 'файл удалён после проверки · данные работы сохранены'
+                          : `${formatSize(submission.size)} · сдано ${formatDateTime(
+                              submission.submitted_at,
+                            )}`}
                       </span>
                     </div>
                   </div>

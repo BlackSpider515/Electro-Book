@@ -4,6 +4,7 @@ import {
   Check,
   Download,
   FileText,
+  FileX,
   History,
   Info,
   Loader2,
@@ -255,7 +256,13 @@ export function ReviewDrawer({
 
   const gradeType = normalizeGradeType(meta?.gradeType)
   const kind = submission ? fileKind(submission.original_name ?? '') : null
-  const canMark = mode === 'admin' && kind && ['pdf', 'docx', 'txt'].includes(kind.preview)
+  const fileDeleted = Boolean(
+    submission &&
+      (submission.file_deleted_at ||
+        (!submission.file_path && Boolean(submission.original_name))),
+  )
+  const canMark =
+    mode === 'admin' && !fileDeleted && kind && ['pdf', 'docx', 'txt'].includes(kind.preview)
 
   const pickRect = (page: number, rect: AnnotationRect) => {
     setDraft({ kind: 'pdf', page, rects: [rect] })
@@ -384,6 +391,7 @@ export function ReviewDrawer({
   }
 
   const downloadVersion = async (version: SubmissionVersion) => {
+    if (!version.file_path) return
     try {
       await backend.files.download(
         version.file_path,
@@ -467,9 +475,12 @@ export function ReviewDrawer({
                 {submission.size ? (
                   <span className="muted">{formatSize(submission.size)}</span>
                 ) : null}
+                {fileDeleted ? (
+                  <span className="file-deleted-note">удалён после проверки</span>
+                ) : null}
               </div>
               <div className="review-toolbar__actions">
-                {submission.file_path ? (
+                {submission.file_path && !fileDeleted ? (
                   <button type="button" className="btn btn--ghost btn--sm" onClick={download}>
                     <Download size={16} /> Скачать
                   </button>
@@ -511,6 +522,15 @@ export function ReviewDrawer({
                   <button type="button" className="btn btn--secondary" onClick={download}>
                     <Download size={16} /> Скачать файл
                   </button>
+                </div>
+              ) : fileDeleted ? (
+                <div className="viewer-fallback viewer-fallback--deleted">
+                  <FileX size={30} />
+                  <h3>Файл удалён после проверки</h3>
+                  <p>
+                    Файл и его прошлые версии хранились 7 дней после выставления оценки и были
+                    удалены из хранилища. Оценка, замечания и данные о работе сохранены.
+                  </p>
                 </div>
               ) : !submission.file_path ? (
                 <div className="viewer-fallback">
@@ -718,13 +738,25 @@ export function ReviewDrawer({
               ) : (
                 <p className="grade-card__hint">
                   {submission.grade != null
-                    ? `Ваша оценка: ${gradeLabel(
-                        gradeType,
-                        submission.grade,
-                      )}. Замена файла больше недоступна.`
+                    ? fileDeleted
+                      ? `Ваша оценка: ${gradeLabel(
+                          gradeType,
+                          submission.grade,
+                        )}. Файл удалён из хранилища через 7 дней после проверки.`
+                      : `Ваша оценка: ${gradeLabel(
+                          gradeType,
+                          submission.grade,
+                        )}. Замена файла больше недоступна.`
                     : 'Пока оценки нет — файл можно заменить в разделе «Задания».'}
                 </p>
               )}
+
+              {mode === 'admin' && submission.grade != null && !fileDeleted ? (
+                <p className="grade-card__hint grade-card__hint--retention">
+                  Файл будет удалён из хранилища через 7 дней после проверки. Оценка и данные
+                  работы останутся.
+                </p>
+              ) : null}
 
               {mode === 'admin' ? (
                 <button
@@ -829,25 +861,32 @@ export function ReviewDrawer({
                   <History size={16} /> История версий ({versions.length})
                 </summary>
                 <ul>
-                  {versions.map((version) => (
-                    <li key={version.id}>
-                      <div>
-                        <strong>Версия {version.version}</strong>
-                        <span>
-                          {formatDateTime(version.created_at)} · {formatSize(version.size)}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        className="mini-icon-btn"
-                        onClick={() => downloadVersion(version)}
-                        title="Скачать версию"
-                        aria-label={`Скачать версию ${version.version}`}
-                      >
-                        <Download size={14} />
-                      </button>
-                    </li>
-                  ))}
+                  {versions.map((version) => {
+                    const deleted = Boolean(version.file_deleted_at || !version.file_path)
+                    return (
+                      <li key={version.id}>
+                        <div>
+                          <strong>Версия {version.version}</strong>
+                          <span>
+                            {formatDateTime(version.created_at)} · {formatSize(version.size)}
+                          </span>
+                        </div>
+                        {deleted ? (
+                          <span className="version-deleted">файл удалён</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="mini-icon-btn"
+                            onClick={() => downloadVersion(version)}
+                            title="Скачать версию"
+                            aria-label={`Скачать версию ${version.version}`}
+                          >
+                            <Download size={14} />
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
               </details>
             ) : null}

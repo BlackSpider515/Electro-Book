@@ -60,7 +60,7 @@ revoke all on public.submissions from anon, authenticated;
 grant select, insert, update, delete on public.submissions to authenticated;
 
 revoke all on public.submission_versions from anon, authenticated;
-grant select, insert, delete on public.submission_versions to authenticated;
+grant select, insert, update, delete on public.submission_versions to authenticated;
 
 revoke all on public.annotations from anon, authenticated;
 grant select, insert, update, delete on public.annotations to authenticated;
@@ -244,6 +244,13 @@ drop policy if exists versions_admin_delete on public.submission_versions;
 create policy versions_admin_delete on public.submission_versions
   for delete to authenticated
   using (public.is_admin());
+
+-- Преподаватель помечает файлы версий удалёнными после истечения срока хранения.
+drop policy if exists versions_admin_update on public.submission_versions;
+create policy versions_admin_update on public.submission_versions
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
 
 -- ---------- Политики: annotations ----------
 drop policy if exists annotations_select on public.annotations;

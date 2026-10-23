@@ -28,6 +28,7 @@ import {
 import { extensionOf, fileKind, safeMime, sanitizeFileName } from '../fileTypes'
 import { defaultSubject } from '../supabase'
 import { validateGrade } from '../grades'
+import { isReviewRetentionExpired } from '../retention'
 
 const listeners = new Set<(profile: Profile | null) => void>()
 
@@ -454,6 +455,8 @@ export const demoBackend: Backend = {
         submission.version = stored.version
         submission.status = 'submitted'
         submission.submitted_at = timestamp
+        submission.reviewed_at = null
+        submission.file_deleted_at = null
         submission.updated_at = timestamp
       } else {
         submission = {
@@ -468,6 +471,8 @@ export const demoBackend: Backend = {
           grade: null,
           status: 'submitted',
           version: stored.version,
+          reviewed_at: null,
+          file_deleted_at: null,
           updated_at: timestamp,
         }
         db.submissions.push(submission)
@@ -481,6 +486,7 @@ export const demoBackend: Backend = {
         size: stored.size,
         version: stored.version,
         created_at: timestamp,
+        file_deleted_at: null,
       })
       saveDb()
       return { ...submission }
@@ -503,6 +509,7 @@ export const demoBackend: Backend = {
       if (message) throw new Error(message)
       submission.grade = grade
       submission.status = grade != null ? 'reviewed' : 'submitted'
+      submission.reviewed_at = grade != null ? new Date().toISOString() : null
       submission.updated_at = new Date().toISOString()
       saveDb()
     },
@@ -528,6 +535,8 @@ export const demoBackend: Backend = {
         grade: null,
         status: 'submitted',
         version: 1,
+        reviewed_at: null,
+        file_deleted_at: null,
         updated_at: timestamp,
       }
       db.submissions.push(submission)
@@ -574,6 +583,43 @@ export const demoBackend: Backend = {
       const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
       const file = new File([blob], submission.original_name, { type: 'text/plain' })
       return demoBackend.submissions.replace(submission.id, file)
+    },
+    async cleanupReviewedFiles() {
+      requireAdmin()
+      const db = loadDb()
+      const expired = db.submissions.filter(
+        (submission) =>
+          submission.grade != null &&
+          !submission.file_deleted_at &&
+          isReviewRetentionExpired(submission.reviewed_at ?? submission.updated_at),
+      )
+      if (!expired.length) return 0
+
+      const submissionIds = new Set(expired.map((submission) => submission.id))
+      const paths = new Set<string>()
+      for (const submission of expired) {
+        if (submission.file_path) paths.add(submission.file_path)
+      }
+      for (const version of db.versions) {
+        if (submissionIds.has(version.submission_id) && version.file_path) {
+          paths.add(version.file_path)
+        }
+      }
+      for (const path of paths) await deleteDemoFile(path)
+
+      const deletedAt = new Date().toISOString()
+      for (const submission of expired) {
+        submission.file_path = null
+        submission.file_deleted_at = deletedAt
+      }
+      for (const version of db.versions) {
+        if (submissionIds.has(version.submission_id)) {
+          version.file_path = null
+          version.file_deleted_at = deletedAt
+        }
+      }
+      saveDb()
+      return expired.length
     },
   },
 

@@ -2283,6 +2283,37 @@ svg {
   white-space: nowrap;
 }
 
+.works-file--deleted {
+  color: var(--muted);
+}
+
+.file-deleted-note {
+  font-size: 9px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.assignment-card__file--deleted {
+  color: var(--muted);
+  border-style: dashed;
+  background: #fbfbfb;
+}
+
+.version-deleted {
+  font-size: 8.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.viewer-fallback--deleted {
+  border-style: dashed;
+  background: var(--bg-soft);
+}
+
+.grade-card__hint--retention {
+  color: var(--amber);
+}
+
 .inline-grade {
   display: inline-flex;
   align-items: center;

@@ -60,6 +60,8 @@ create table if not exists public.submissions (
   status        text not null default 'submitted'
                 check (status in ('submitted', 'reviewed', 'revoked')),
   version       integer not null default 1 check (version >= 1),
+  reviewed_at   timestamptz,
+  file_deleted_at timestamptz,
   updated_at    timestamptz not null default now(),
   unique (assignment_id, student_id)
 );
@@ -72,12 +74,13 @@ create index if not exists submissions_submitted_idx on public.submissions (subm
 create table if not exists public.submission_versions (
   id            uuid primary key default gen_random_uuid(),
   submission_id uuid not null references public.submissions (id) on delete cascade,
-  file_path     text not null,
+  file_path     text,
   original_name text,
   mime          text,
   size          bigint,
   version       integer not null,
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  file_deleted_at timestamptz
 );
 
 create index if not exists submission_versions_submission_idx

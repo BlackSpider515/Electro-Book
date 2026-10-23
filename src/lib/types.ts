@@ -41,18 +41,21 @@ export interface Submission {
   grade: number | null
   status: SubmissionStatus
   version: number
+  reviewed_at: string | null
+  file_deleted_at: string | null
   updated_at: string
 }
 
 export interface SubmissionVersion {
   id: string
   submission_id: string
-  file_path: string
+  file_path: string | null
   original_name: string | null
   mime: string | null
   size: number | null
   version: number
   created_at: string
+  file_deleted_at: string | null
 }
 
 export interface AnnotationRange {

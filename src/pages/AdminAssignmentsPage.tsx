@@ -4,6 +4,7 @@ import {
   BookOpenCheck,
   ChevronRight,
   Clock3,
+  FileX,
   Filter,
   FolderOpen,
   RefreshCw,
@@ -65,6 +66,9 @@ export function AdminAssignmentsPage() {
     setLoading(true)
     setError('')
     try {
+      // Срок хранения истёкших файлов проверяем при открытии раздела:
+      // отдельного серверного планировщика у статического GitHub Pages нет.
+      await backend.submissions.cleanupReviewedFiles().catch(() => undefined)
       const [assignmentList, studentList, workRows] = await Promise.all([
         backend.assignments.list(groupName),
         backend.students(groupName),
@@ -281,11 +285,23 @@ export function AdminAssignmentsPage() {
                         ) : null}
                       </td>
                       <td>
-                        <span className="works-file">
-                          <FolderOpen size={15} />
+                        <span
+                          className={`works-file ${
+                            row.submission.file_deleted_at ? 'works-file--deleted' : ''
+                          }`}
+                        >
+                          {row.submission.file_deleted_at ? (
+                            <FileX size={15} />
+                          ) : (
+                            <FolderOpen size={15} />
+                          )}
                           {row.submission.original_name || 'без файла'}
                         </span>
-                        <span className="muted">{formatSize(row.submission.size)}</span>
+                        <span className="muted">
+                          {row.submission.file_deleted_at
+                            ? 'удалён после проверки'
+                            : formatSize(row.submission.size)}
+                        </span>
                       </td>
                       <td>
                         <span>{formatDateTime(row.submission.submitted_at)}</span>

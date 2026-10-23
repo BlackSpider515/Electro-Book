@@ -87,6 +87,7 @@ export function AdminJournalPage() {
     setLoading(true)
     setError('')
     try {
+      await backend.submissions.cleanupReviewedFiles().catch(() => undefined)
       const value = await backend.journal(groupName)
       setData(value)
     } catch (err) {

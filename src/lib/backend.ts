@@ -61,6 +61,8 @@ export interface Backend {
     remove: (submissionId: string) => Promise<void>
     versions: (submissionId: string) => Promise<SubmissionVersion[]>
     saveText: (submissionId: string, text: string) => Promise<Submission>
+    /** Удаляет файлы проверенных работ, у которых истёк срок хранения. */
+    cleanupReviewedFiles: () => Promise<number>
   }
   annotations: {
     list: (submissionId: string) => Promise<Annotation[]>
