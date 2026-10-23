@@ -1,4 +1,5 @@
 export type Role = 'student' | 'admin'
+export type GradeType = 'stars' | 'pass_fail' | 'points'
 
 export interface Profile {
   id: string
@@ -19,8 +20,10 @@ export interface Assignment {
   description: string
   group_name: string
   subject: string
+  grade_type: GradeType
   assigned_date: string
   lesson_number: number
+  due_at: string | null
   created_at: string
 }
 
@@ -104,8 +107,10 @@ export interface NewAssignment {
   title: string
   description: string
   group_name: string
+  grade_type: GradeType
   assigned_date: string
   lesson_number: number
+  due_at: string | null
   subject?: string
 }
 

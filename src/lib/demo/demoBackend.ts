@@ -27,6 +27,7 @@ import {
 } from './demoDb'
 import { extensionOf, fileKind, safeMime, sanitizeFileName } from '../fileTypes'
 import { defaultSubject } from '../supabase'
+import { validateGrade } from '../grades'
 
 const listeners = new Set<(profile: Profile | null) => void>()
 
@@ -326,8 +327,10 @@ export const demoBackend: Backend = {
         description: input.description.trim(),
         group_name: input.group_name,
         subject: input.subject?.trim() || defaultSubject,
+        grade_type: input.grade_type || 'stars',
         assigned_date: input.assigned_date,
         lesson_number: input.lesson_number,
+        due_at: input.due_at || null,
         created_at: new Date().toISOString(),
       }
       if (!assignment.title) throw new Error('Введите название задания')
@@ -341,12 +344,22 @@ export const demoBackend: Backend = {
       const assignment = db.assignments.find((a) => a.id === id)
       if (!assignment) throw new Error('Задание не найдено')
       if (!input.title.trim()) throw new Error('Введите название задания')
+      const nextGradeType = input.grade_type || 'stars'
+      const currentGradeType = assignment.grade_type || 'stars'
+      if (
+        nextGradeType !== currentGradeType &&
+        db.submissions.some((s) => s.assignment_id === id && s.grade != null)
+      ) {
+        throw new Error('Нельзя менять систему оценивания после выставления оценок')
+      }
       assignment.title = input.title.trim()
       assignment.description = input.description.trim()
       assignment.group_name = input.group_name
       if (input.subject) assignment.subject = input.subject
+      assignment.grade_type = nextGradeType
       assignment.assigned_date = input.assigned_date
       assignment.lesson_number = input.lesson_number
+      assignment.due_at = input.due_at || null
       saveDb()
       return { ...assignment }
     },
@@ -482,10 +495,12 @@ export const demoBackend: Backend = {
     },
     async setGrade(submissionId: string, grade: number | null) {
       requireAdmin()
-      if (grade != null && (grade < 1 || grade > 5)) throw new Error('Оценка от 1 до 5')
       const db = loadDb()
       const submission = db.submissions.find((s) => s.id === submissionId)
       if (!submission) throw new Error('Работа не найдена')
+      const assignment = db.assignments.find((a) => a.id === submission.assignment_id)
+      const message = validateGrade(assignment?.grade_type, grade)
+      if (message) throw new Error(message)
       submission.grade = grade
       submission.status = grade != null ? 'reviewed' : 'submitted'
       submission.updated_at = new Date().toISOString()

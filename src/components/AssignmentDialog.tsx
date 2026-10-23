@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { CalendarDays, Loader2, Save } from 'lucide-react'
+import { CalendarDays, Clock3, Loader2, Save } from 'lucide-react'
 import { Modal } from './Modal'
-import type { Assignment, Group, NewAssignment } from '../lib/types'
+import type { Assignment, GradeType, Group, NewAssignment } from '../lib/types'
 import { backend } from '../lib/api'
 import { todayISO } from '../lib/format'
+import { GRADE_TYPES, toDateTimeLocal } from '../lib/grades'
 import { useToast } from '../context/ToastContext'
 
 interface AssignmentDialogProps {
@@ -29,6 +30,8 @@ export function AssignmentDialog({
   const [groupName, setGroupName] = useState(defaultGroup)
   const [date, setDate] = useState(todayISO())
   const [lesson, setLesson] = useState(1)
+  const [gradeType, setGradeType] = useState<GradeType>('stars')
+  const [dueAt, setDueAt] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -42,12 +45,16 @@ export function AssignmentDialog({
       setGroupName(assignment.group_name)
       setDate(assignment.assigned_date)
       setLesson(assignment.lesson_number)
+      setGradeType(assignment.grade_type || 'stars')
+      setDueAt(toDateTimeLocal(assignment.due_at))
     } else {
       setTitle('')
       setDescription('')
       setGroupName(defaultGroup || groups[0]?.name || '')
       setDate(todayISO())
       setLesson(1)
+      setGradeType('stars')
+      setDueAt('')
     }
   }, [open, assignment, defaultGroup, groups])
 
@@ -62,13 +69,24 @@ export function AssignmentDialog({
       setError('Выберите группу')
       return
     }
+    let dueIso: string | null = null
+    if (dueAt) {
+      const parsed = new Date(dueAt)
+      if (Number.isNaN(parsed.getTime())) {
+        setError('Некорректный дедлайн')
+        return
+      }
+      dueIso = parsed.toISOString()
+    }
     setBusy(true)
     const payload: NewAssignment = {
       title: title.trim(),
       description: description.trim(),
       group_name: groupName,
+      grade_type: gradeType,
       assigned_date: date || todayISO(),
       lesson_number: lesson,
+      due_at: dueIso,
     }
     try {
       const value = assignment
@@ -154,6 +172,41 @@ export function AssignmentDialog({
                 </option>
               ))}
             </select>
+          </label>
+        </div>
+        <div className="form-row form-row--two">
+          <label className="field">
+            <span>Система оценивания</span>
+            <select
+              value={gradeType}
+              onChange={(event) => setGradeType(event.target.value as GradeType)}
+              data-testid="assignment-grade-type"
+            >
+              {GRADE_TYPES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <small className="field-hint">
+              {GRADE_TYPES.find((item) => item.value === gradeType)?.hint}. После выставления
+              оценок систему менять нельзя.
+            </small>
+          </label>
+          <label className="field">
+            <span>Дедлайн сдачи — дата и время</span>
+            <div className="input-with-icon">
+              <Clock3 size={16} />
+              <input
+                type="datetime-local"
+                value={dueAt}
+                onChange={(event) => setDueAt(event.target.value)}
+                data-testid="assignment-due-at"
+              />
+            </div>
+            <small className="field-hint">
+              Можно оставить пустым. После дедлайна несданные работы подсветятся красным.
+            </small>
           </label>
         </div>
         <div className="modal-actions">

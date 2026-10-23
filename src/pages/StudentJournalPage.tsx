@@ -47,6 +47,7 @@ export function StudentJournalPage() {
       studentName: profile.full_name,
       assignmentTitle: assignment?.title,
       groupName: profile.group_name ?? undefined,
+      gradeType: assignment?.grade_type,
     }
   }, [reviewId, data, profile])
 

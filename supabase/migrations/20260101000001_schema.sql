@@ -36,8 +36,10 @@ create table if not exists public.assignments (
   description   text not null default '',
   group_name    text not null references public.groups (name) on update cascade on delete cascade,
   subject       text not null default 'Учебная дисциплина',
+  grade_type    text not null default 'stars' check (grade_type in ('stars', 'pass_fail', 'points')),
   assigned_date date not null default current_date,
   lesson_number smallint not null default 1 check (lesson_number between 1 and 4),
+  due_at        timestamptz,
   created_at    timestamptz not null default now()
 );
 
@@ -54,7 +56,7 @@ create table if not exists public.submissions (
   mime          text,
   size          bigint check (size is null or size > 0),
   submitted_at  timestamptz not null default now(),
-  grade         smallint check (grade between 1 and 5),
+  grade         integer check (grade between 0 and 100),
   status        text not null default 'submitted'
                 check (status in ('submitted', 'reviewed', 'revoked')),
   version       integer not null default 1 check (version >= 1),

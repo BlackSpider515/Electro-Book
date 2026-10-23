@@ -17,11 +17,19 @@ import {
 } from 'lucide-react'
 import { Modal } from './Modal'
 import { Stars } from './Stars'
+import { GradeBadge } from './GradeBadge'
 import { FileViewer } from './viewers/FileViewer'
 import { backend } from '../lib/api'
 import { editingEnabled } from '../lib/supabase'
-import type { Annotation, AnnotationRect, Submission, SubmissionVersion } from '../lib/types'
+import type {
+  Annotation,
+  AnnotationRect,
+  GradeType,
+  Submission,
+  SubmissionVersion,
+} from '../lib/types'
 import { formatDateTime, formatSize } from '../lib/format'
+import { gradeLabel, gradeTypeLabel, normalizeGradeType, validateGrade } from '../lib/grades'
 import { fileKind } from '../lib/fileTypes'
 import { useToast } from '../context/ToastContext'
 
@@ -29,6 +37,7 @@ export interface ReviewMeta {
   studentName?: string
   assignmentTitle?: string
   groupName?: string
+  gradeType?: GradeType
 }
 
 interface ReviewDrawerProps {
@@ -173,6 +182,7 @@ export function ReviewDrawer({
   const [draftKey, setDraftKey] = useState(0)
   const [savingAnnotation, setSavingAnnotation] = useState(false)
   const [gradeBusy, setGradeBusy] = useState(false)
+  const [pointsDraft, setPointsDraft] = useState('')
   const [removing, setRemoving] = useState(false)
   const [editingText, setEditingText] = useState(false)
   const [textValue, setTextValue] = useState('')
@@ -238,6 +248,12 @@ export function ReviewDrawer({
     }
   }, [open, submissionId, loadBlob])
 
+  useEffect(() => {
+    if (!open || !submission) return
+    setPointsDraft(submission.grade != null ? String(submission.grade) : '')
+  }, [open, submission?.id, submission?.grade])
+
+  const gradeType = normalizeGradeType(meta?.gradeType)
   const kind = submission ? fileKind(submission.original_name ?? '') : null
   const canMark = mode === 'admin' && kind && ['pdf', 'docx', 'txt'].includes(kind.preview)
 
@@ -296,6 +312,11 @@ export function ReviewDrawer({
 
   const setGrade = async (grade: number | null) => {
     if (!submission || gradeBusy) return
+    const message = validateGrade(gradeType, grade)
+    if (message) {
+      toast.error(message)
+      return
+    }
     setGradeBusy(true)
     try {
       await backend.submissions.setGrade(submission.id, grade)
@@ -304,13 +325,28 @@ export function ReviewDrawer({
           ? { ...current, grade, status: grade != null ? 'reviewed' : 'submitted' }
           : current,
       )
-      toast.success(grade != null ? `Оценка ${grade} выставлена` : 'Оценка снята')
+      toast.success(
+        grade != null ? `Оценка: ${gradeLabel(gradeType, grade)}` : 'Оценка снята',
+      )
       onChanged?.()
     } catch (err) {
       toast.error((err as Error).message)
     } finally {
       setGradeBusy(false)
     }
+  }
+
+  const savePointsGrade = () => {
+    if (!pointsDraft.trim()) {
+      toast.error('Введите балл от 0 до 100')
+      return
+    }
+    const value = Number(pointsDraft)
+    if (!Number.isInteger(value) || value < 0 || value > 100) {
+      toast.error('Балл должен быть целым числом от 0 до 100')
+      return
+    }
+    setGrade(value)
   }
 
   const removeSubmission = async () => {
@@ -548,8 +584,12 @@ export function ReviewDrawer({
                 <span>Сдано {formatDateTime(submission.submitted_at)}</span>
               </div>
               <div className="review-info__meta">
-                <span className={`status-pill status-pill--${submission.grade ? 'graded' : 'sent'}`}>
-                  {submission.grade ? 'Оценено' : 'На проверке'}
+                <span
+                  className={`status-pill status-pill--${
+                    submission.grade != null ? 'graded' : 'sent'
+                  }`}
+                >
+                  {submission.grade != null ? 'Оценено' : 'На проверке'}
                 </span>
                 <span className="muted">версия {submission.version}</span>
               </div>
@@ -558,34 +598,134 @@ export function ReviewDrawer({
             <div className="grade-card">
               <div className="grade-card__head">
                 <strong>Оценка</strong>
-                {mode === 'admin' ? (
-                  <span className="muted">1–5 звёзд</span>
-                ) : (
-                  <span className="muted">преподаватель</span>
-                )}
+                <span className="muted">
+                  {mode === 'admin' ? gradeTypeLabel(gradeType) : 'преподаватель'}
+                </span>
               </div>
-              <div className="grade-card__stars">
-                <Stars
-                  value={submission.grade}
-                  onChange={mode === 'admin' ? setGrade : undefined}
-                  size={24}
-                  showEmpty
-                  label={submission.grade ? `Оценка ${submission.grade} из 5` : 'Оценки пока нет'}
-                />
-                {submission.grade ? <b className="grade-card__num">{submission.grade}</b> : null}
-              </div>
+
+              {gradeType === 'pass_fail' ? (
+                <div className="grade-choice">
+                  {mode === 'admin' ? (
+                    <>
+                      <button
+                        type="button"
+                        className={`grade-choice__btn grade-choice__btn--pass ${
+                          submission.grade === 1 ? 'is-active' : ''
+                        }`}
+                        onClick={() => setGrade(1)}
+                        disabled={gradeBusy}
+                        data-testid="grade-pass"
+                      >
+                        <Check size={17} /> Зачёт
+                      </button>
+                      <button
+                        type="button"
+                        className={`grade-choice__btn grade-choice__btn--fail ${
+                          submission.grade === 0 ? 'is-active' : ''
+                        }`}
+                        onClick={() => setGrade(0)}
+                        disabled={gradeBusy}
+                        data-testid="grade-fail"
+                      >
+                        <X size={17} /> Незачёт
+                      </button>
+                      {submission.grade != null ? (
+                        <button
+                          type="button"
+                          className="text-btn"
+                          onClick={() => setGrade(null)}
+                          disabled={gradeBusy}
+                        >
+                          Снять
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <GradeBadge grade={submission.grade} type="pass_fail" />
+                  )}
+                </div>
+              ) : gradeType === 'points' ? (
+                <div className="grade-points-editor">
+                  {mode === 'admin' ? (
+                    <>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={pointsDraft}
+                        onChange={(event) => setPointsDraft(event.target.value)}
+                        placeholder="0–100"
+                        disabled={gradeBusy}
+                        data-testid="points-grade-input"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn--primary btn--sm"
+                        onClick={savePointsGrade}
+                        disabled={gradeBusy}
+                        data-testid="save-points-grade"
+                      >
+                        {gradeBusy ? (
+                          <Loader2 className="spin" size={15} />
+                        ) : (
+                          <Save size={15} />
+                        )}
+                        Сохранить
+                      </button>
+                      {submission.grade != null ? (
+                        <button
+                          type="button"
+                          className="text-btn"
+                          onClick={() => setGrade(null)}
+                          disabled={gradeBusy}
+                        >
+                          Снять
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <GradeBadge grade={submission.grade} type="points" size={20} />
+                  )}
+                </div>
+              ) : (
+                <div className="grade-card__stars">
+                  <Stars
+                    value={submission.grade}
+                    onChange={mode === 'admin' ? setGrade : undefined}
+                    size={24}
+                    showEmpty
+                    label={
+                      submission.grade != null
+                        ? `Оценка ${submission.grade} из 5`
+                        : 'Оценки пока нет'
+                    }
+                  />
+                  {submission.grade != null ? (
+                    <b className="grade-card__num">{submission.grade}</b>
+                  ) : null}
+                </div>
+              )}
+
               {mode === 'admin' ? (
                 <p className="grade-card__hint">
-                  Нажмите на звезду, чтобы выставить оценку. Повторное нажатие на выбранную
-                  звезду снимает оценку. После оценки работа блокируется.
+                  {gradeType === 'pass_fail'
+                    ? 'Выберите «Зачёт» или «Незачёт». После оценки работа блокируется для студента.'
+                    : gradeType === 'points'
+                      ? 'Введите целое число от 0 до 100 и нажмите «Сохранить». После оценки работа блокируется для студента.'
+                      : 'Нажмите на звезду, чтобы выставить оценку. Повторное нажатие на выбранную звезду снимает оценку. После оценки работа блокируется.'}
                 </p>
               ) : (
                 <p className="grade-card__hint">
-                  {submission.grade
-                    ? 'Работа оценена. Замена файла больше недоступна.'
+                  {submission.grade != null
+                    ? `Ваша оценка: ${gradeLabel(
+                        gradeType,
+                        submission.grade,
+                      )}. Замена файла больше недоступна.`
                     : 'Пока оценки нет — файл можно заменить в разделе «Задания».'}
                 </p>
               )}
+
               {mode === 'admin' ? (
                 <button
                   type="button"

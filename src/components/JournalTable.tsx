@@ -3,6 +3,7 @@ import {
   ArrowDownAZ,
   ArrowUpAZ,
   CalendarDays,
+  Clock3,
   Pencil,
   Plus,
   Trash2,
@@ -11,8 +12,9 @@ import {
 } from 'lucide-react'
 import type { Assignment, JournalData, JournalEntry, Profile } from '../lib/types'
 import { defaultSubject } from '../lib/supabase'
-import { formatDate, formatDateShort } from '../lib/format'
-import { Stars } from './Stars'
+import { formatDate, formatDateShort, formatDateTime } from '../lib/format'
+import { gradeLabel, gradeRatio, isOverdue } from '../lib/grades'
+import { GradeBadge } from './GradeBadge'
 
 type SortMode = 'name-asc' | 'name-desc' | 'performance'
 
@@ -67,6 +69,12 @@ export function JournalTable({
     return map
   }, [data.entries])
 
+  const assignmentMap = useMemo(() => {
+    const map = new Map<string, Assignment>()
+    for (const assignment of data.assignments) map.set(assignment.id, assignment)
+    return map
+  }, [data.assignments])
+
   const statsByStudent = useMemo(() => {
     const map = new Map<string, { submitted: number; graded: number; sum: number }>()
     for (const student of data.students) {
@@ -77,12 +85,13 @@ export function JournalTable({
       if (!stat) continue
       stat.submitted += 1
       if (entry.grade != null) {
+        const assignment = assignmentMap.get(entry.assignment_id)
         stat.graded += 1
-        stat.sum += entry.grade
+        stat.sum += gradeRatio(assignment?.grade_type, entry.grade)
       }
     }
     return map
-  }, [data.entries, data.students])
+  }, [data.entries, data.students, assignmentMap])
 
   const students = useMemo(() => {
     const list = [...data.students]
@@ -242,6 +251,16 @@ export function JournalTable({
                       {assignment.description ? (
                         <span className="task-cell__desc">{assignment.description}</span>
                       ) : null}
+                      {assignment.due_at ? (
+                        <span
+                          className={`task-cell__due ${
+                            isOverdue(assignment.due_at) ? 'is-overdue' : ''
+                          }`}
+                          title={`Дедлайн: ${formatDateTime(assignment.due_at)}`}
+                        >
+                          <Clock3 size={11} /> до {formatDateTime(assignment.due_at)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </th>
@@ -250,34 +269,49 @@ export function JournalTable({
                   const isOwn = student.id === currentStudentId
                   const isAdmin = mode === 'admin'
                   const canSubmit = !isAdmin && isOwn && !entry
+                  const overdue = isOverdue(assignment.due_at)
+                  const showUrgent = overdue && !entry && (isAdmin || isOwn)
                   return (
                     <td
                       key={student.id}
                       className={`journal-cell ${isOwn ? 'is-own' : ''} ${
-                        isAdmin || (isOwn && entry) ? 'is-clickable' : ''
+                        isAdmin || (isOwn && (entry || canSubmit)) ? 'is-clickable' : ''
                       }`}
                       onClick={() => handleCell(student, assignment, entry)}
                       title={
-                        isAdmin
-                          ? 'Изменить отметку'
-                          : canSubmit
-                            ? 'Сдать работу'
-                            : entry?.grade
-                              ? `Оценка: ${entry.grade}`
-                              : entry
-                                ? 'Работа сдана'
-                                : ''
+                        showUrgent
+                          ? `Дедлайн прошёл: ${formatDateTime(assignment.due_at)}`
+                          : isAdmin
+                            ? 'Изменить отметку'
+                            : canSubmit
+                              ? 'Сдать работу'
+                              : entry?.grade != null
+                                ? `Оценка: ${gradeLabel(
+                                    assignment.grade_type,
+                                    entry.grade,
+                                  )}`
+                                : entry
+                                  ? 'Работа сдана'
+                                  : ''
                       }
                     >
                       {entry ? (
                         entry.grade != null ? (
-                          <span className={`grade-value grade-value--${entry.grade}`}>
-                            {entry.grade}
-                            <span className="grade-value__star">★</span>
-                          </span>
+                          <GradeBadge
+                            grade={entry.grade}
+                            type={assignment.grade_type}
+                            variant="cell"
+                          />
                         ) : (
                           <span className="mark-plus">+</span>
                         )
+                      ) : showUrgent ? (
+                        <span
+                          className="urgent-cell"
+                          data-testid={`urgent-cell-${assignment.id}-${student.id}`}
+                        >
+                          Срочно сдать!
+                        </span>
                       ) : canSubmit ? (
                         <button
                           type="button"
@@ -339,7 +373,13 @@ export function JournalTable({
           <b className="mark-plus">+</b> сдано
         </span>
         <span>
-          <Stars value={5} size={13} /> оценка (1–5)
+          <GradeBadge grade={5} type="stars" size={13} variant="cell" /> оценки 1–5
+        </span>
+        <span>
+          <GradeBadge grade={1} type="pass_fail" variant="cell" /> зачёт
+        </span>
+        <span>
+          <GradeBadge grade={87} type="points" variant="cell" /> баллы 0–100
         </span>
         <span className="cell-empty" /> не сдано
         {mode === 'admin' ? <span className="muted">Клик по ячейке — редактирование</span> : null}

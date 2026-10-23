@@ -4253,6 +4253,226 @@ svg {
   }
 }
 
+/* ============ Grade systems & deadlines ============ */
+
+.form-row--two {
+  grid-template-columns: 1fr 1.35fr;
+}
+
+.field-hint {
+  font-size: 9.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.task-cell__due {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 205px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  line-height: 1.25;
+  color: #7b8794;
+}
+
+.task-cell__due.is-overdue {
+  color: #b3261e;
+  font-weight: 800;
+}
+
+.urgent-cell {
+  display: inline-block;
+  max-width: 64px;
+  color: #b3261e;
+  font-size: 8.5px;
+  font-weight: 900;
+  line-height: 1.12;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.grade-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 3px 7px;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.grade-badge--pass {
+  color: #145f40;
+  background: #dff4e9;
+  border-color: #a9dcc4;
+}
+
+.grade-badge--fail {
+  color: #9d3232;
+  background: #fbe3e3;
+  border-color: #efbcbc;
+}
+
+.grade-badge--points {
+  color: #1e5b8f;
+  background: #e2eefb;
+  border-color: #b6d3ef;
+  font-variant-numeric: tabular-nums;
+}
+
+.grade-badge--points small {
+  font-size: 8px;
+  font-weight: 700;
+  opacity: 0.72;
+}
+
+.grade-badge--cell {
+  border-radius: 6px;
+  padding: 2px 5px;
+  font-size: 9.5px;
+}
+
+.grade-badge--cell.grade-badge--points small {
+  font-size: 7.5px;
+}
+
+.grade-badge--plain {
+  font-size: 14px;
+  padding: 5px 10px;
+}
+
+.status-pill--overdue {
+  background: #fbe3e3;
+  color: #b3261e;
+  border-color: #efbcbc;
+}
+
+.assignment-card--overdue::before {
+  background: #d64545;
+}
+
+.assignment-card__date--due {
+  color: #7b8794;
+}
+
+.assignment-card__date--due.is-overdue {
+  color: #b3261e;
+  font-weight: 800;
+}
+
+.works-due {
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 1px;
+}
+
+.works-due.is-overdue {
+  color: #b3261e;
+  font-weight: 800;
+}
+
+.grade-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.grade-choice__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #e0d3a8;
+  background: #fffdf6;
+  color: #8a640d;
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.grade-choice__btn:hover:not(:disabled) {
+  background: #fdf3d5;
+  border-color: #d9bf6d;
+}
+
+.grade-choice__btn--pass.is-active {
+  background: #1c6e4e;
+  border-color: #1c6e4e;
+  color: #fff;
+}
+
+.grade-choice__btn--fail.is-active {
+  background: #b03a3a;
+  border-color: #b03a3a;
+  color: #fff;
+}
+
+.grade-choice .grade-badge {
+  font-size: 13px;
+  padding: 7px 12px;
+}
+
+.grade-points-editor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.grade-points-editor input {
+  width: 90px;
+  padding: 7px 9px;
+  border: 1px solid #e0d3a8;
+  border-radius: 8px;
+  background: #fffdf6;
+  color: #6f5814;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.grade-points-editor .grade-badge {
+  font-size: 16px;
+  padding: 6px 10px;
+}
+
+.grade-points-editor--compact {
+  flex: 1;
+  min-width: 160px;
+}
+
+.grade-points-editor--compact input {
+  flex: 1;
+  width: auto;
+  min-width: 70px;
+}
+
+.grade-picker__btn--wide {
+  padding: 7px 12px;
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .form-row--two {
+    grid-template-columns: 1fr;
+  }
+
+  .grade-choice__btn,
+  .grade-points-editor input {
+    flex: 1;
+  }
+}
+
 /* Reduced motion */
 
 @media (prefers-reduced-motion: reduce) {

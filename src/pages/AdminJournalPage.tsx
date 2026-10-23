@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Star,
   Users,
+  X,
 } from 'lucide-react'
 import { AppShell } from '../components/AppShell'
 import { JournalTable } from '../components/JournalTable'
@@ -19,12 +20,14 @@ import { useToast } from '../context/ToastContext'
 import { backend } from '../lib/api'
 import type {
   Assignment,
+  GradeType,
   Group,
   JournalData,
   JournalEntry,
   Profile,
 } from '../lib/types'
 import { formatDate } from '../lib/format'
+import { gradeLabel, gradeTypeLabel, normalizeGradeType, validateGrade } from '../lib/grades'
 
 interface CellDraft {
   student: Profile
@@ -36,6 +39,7 @@ interface ReviewState {
   submissionId: string
   studentName: string
   assignmentTitle: string
+  gradeType: GradeType
 }
 
 export function AdminJournalPage() {
@@ -51,6 +55,7 @@ export function AdminJournalPage() {
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null)
   const [cell, setCell] = useState<CellDraft | null>(null)
   const [cellBusy, setCellBusy] = useState(false)
+  const [cellPoints, setCellPoints] = useState('')
   const [review, setReview] = useState<ReviewState | null>(null)
 
   useEffect(() => {
@@ -101,8 +106,11 @@ export function AdminJournalPage() {
       studentName: review.studentName,
       assignmentTitle: review.assignmentTitle,
       groupName,
+      gradeType: review.gradeType,
     }
   }, [review, groupName])
+
+  const cellGradeType = normalizeGradeType(cell?.assignment.grade_type)
 
   const handleCellClick = (
     student: Profile,
@@ -114,9 +122,11 @@ export function AdminJournalPage() {
         submissionId: entry.submission_id,
         studentName: student.full_name,
         assignmentTitle: assignment.title,
+        gradeType: normalizeGradeType(assignment.grade_type),
       })
       return
     }
+    setCellPoints(entry?.grade != null ? String(entry.grade) : '')
     setCell({ student, assignment, entry })
   }
 
@@ -149,6 +159,7 @@ export function AdminJournalPage() {
       await ensureSubmission()
       toast.success('Отметка «+» поставлена')
       setCell(null)
+      setCellPoints('')
       setRefreshKey((value) => value + 1)
     } catch (err) {
       toast.error((err as Error).message)
@@ -159,13 +170,19 @@ export function AdminJournalPage() {
 
   const setCellGrade = async (grade: number) => {
     if (!cell) return
+    const message = validateGrade(cell.assignment.grade_type, grade)
+    if (message) {
+      toast.error(message)
+      return
+    }
     setCellBusy(true)
     try {
       const submissionId = await ensureSubmission()
       if (!submissionId) throw new Error('Не удалось создать отметку')
       await backend.submissions.setGrade(submissionId, grade)
-      toast.success(`Оценка ${grade} выставлена`)
+      toast.success(`Оценка: ${gradeLabel(cell.assignment.grade_type, grade)}`)
       setCell(null)
+      setCellPoints('')
       setRefreshKey((value) => value + 1)
     } catch (err) {
       toast.error((err as Error).message)
@@ -270,7 +287,7 @@ export function AdminJournalPage() {
           onDeleteAssignment={deleteAssignment}
           actions={
             <span className="journal-toolbar__hint">
-              <Star size={15} /> Оценка ставится звёздами внутри работы
+              <Star size={15} /> Система оценивания задаётся в задании
             </span>
           }
         />
@@ -290,7 +307,10 @@ export function AdminJournalPage() {
 
       <Modal
         open={Boolean(cell)}
-        onClose={() => setCell(null)}
+        onClose={() => {
+          setCell(null)
+          setCellPoints('')
+        }}
         title="Отметка в журнале"
         subtitle={
           cell
@@ -318,20 +338,67 @@ export function AdminJournalPage() {
               Поставить «+» (сдано)
             </button>
             <div className="grade-picker">
-              <span>Оценка:</span>
-              {[1, 2, 3, 4, 5].map((grade) => (
-                <button
-                  key={grade}
-                  type="button"
-                  className="grade-picker__btn"
-                  onClick={() => setCellGrade(grade)}
-                  disabled={cellBusy}
-                  title={`Оценка ${grade}`}
-                  data-testid={`cell-grade-${grade}`}
-                >
-                  {grade} <Star size={14} />
-                </button>
-              ))}
+              <span>Оценка · {gradeTypeLabel(cellGradeType)}:</span>
+              {cellGradeType === 'stars' ? (
+                [1, 2, 3, 4, 5].map((grade) => (
+                  <button
+                    key={grade}
+                    type="button"
+                    className="grade-picker__btn"
+                    onClick={() => setCellGrade(grade)}
+                    disabled={cellBusy}
+                    title={`Оценка ${grade}`}
+                    data-testid={`cell-grade-${grade}`}
+                  >
+                    {grade} <Star size={14} />
+                  </button>
+                ))
+              ) : cellGradeType === 'pass_fail' ? (
+                <>
+                  <button
+                    type="button"
+                    className="grade-picker__btn grade-picker__btn--wide"
+                    onClick={() => setCellGrade(1)}
+                    disabled={cellBusy}
+                    data-testid="cell-grade-pass"
+                  >
+                    <Check size={14} /> Зачёт
+                  </button>
+                  <button
+                    type="button"
+                    className="grade-picker__btn grade-picker__btn--wide"
+                    onClick={() => setCellGrade(0)}
+                    disabled={cellBusy}
+                    data-testid="cell-grade-fail"
+                  >
+                    <X size={14} /> Незачёт
+                  </button>
+                </>
+              ) : (
+                <div className="grade-points-editor grade-points-editor--compact">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={cellPoints}
+                    onChange={(event) => setCellPoints(event.target.value)}
+                    placeholder="0–100"
+                    disabled={cellBusy}
+                    data-testid="cell-points-input"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--sm"
+                    onClick={() => setCellGrade(Number(cellPoints))}
+                    disabled={cellBusy || !cellPoints.trim()}
+                    data-testid="cell-save-points"
+                  >
+                    {cellBusy ? <Loader2 className="spin" size={15} /> : <Check size={15} />}
+                    Поставить
+                  </button>
+                </div>
+              )}
             </div>
             <p className="cell-editor__note">
               Если студент прикрепит файл позже, оценка сохранится, а файл можно будет посмотреть

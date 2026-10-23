@@ -15,6 +15,7 @@ import type {
 import type { AnnotationInput, Backend, SubmissionFilters } from './backend'
 import { supabase, supabaseAnonKey, supabaseUrl } from './supabase'
 import { extensionOf, safeMime, sanitizeFileName } from './fileTypes'
+import { validateGrade } from './grades'
 
 function client(): SupabaseClient {
   if (!supabase) throw new Error('Supabase не настроен')
@@ -342,8 +343,10 @@ export const supabaseBackend: Backend = {
           title: input.title.trim(),
           description: input.description.trim(),
           group_name: input.group_name,
+          grade_type: input.grade_type || 'stars',
           assigned_date: input.assigned_date,
           lesson_number: input.lesson_number,
+          due_at: input.due_at || null,
           ...(input.subject ? { subject: input.subject } : {}),
         })
         .select('*')
@@ -359,8 +362,10 @@ export const supabaseBackend: Backend = {
           title: input.title.trim(),
           description: input.description.trim(),
           group_name: input.group_name,
+          grade_type: input.grade_type || 'stars',
           assigned_date: input.assigned_date,
           lesson_number: input.lesson_number,
+          due_at: input.due_at || null,
           ...(input.subject ? { subject: input.subject } : {}),
         })
         .eq('id', id)
@@ -526,7 +531,25 @@ export const supabaseBackend: Backend = {
     },
     async setGrade(submissionId: string, grade: number | null) {
       await requireAdmin()
-      if (grade != null && (grade < 1 || grade > 5)) throw new Error('Оценка от 1 до 5')
+      if (grade != null) {
+        const { data: submission, error: submissionError } = await client()
+          .from('submissions')
+          .select('assignment_id')
+          .eq('id', submissionId)
+          .single()
+        if (submissionError) throw new Error(submissionError.message)
+        const { data: assignment, error: assignmentError } = await client()
+          .from('assignments')
+          .select('grade_type')
+          .eq('id', (submission as { assignment_id: string }).assignment_id)
+          .single()
+        if (assignmentError) throw new Error(assignmentError.message)
+        const message = validateGrade(
+          (assignment as { grade_type: string | null }).grade_type,
+          grade,
+        )
+        if (message) throw new Error(message)
+      }
       const { error } = await client()
         .from('submissions')
         .update({ grade, status: grade != null ? 'reviewed' : 'submitted' })

@@ -17,10 +17,11 @@ import { AppShell } from '../components/AppShell'
 import { SubmitDialog } from '../components/SubmitDialog'
 import { ReviewDrawer } from '../components/ReviewDrawer'
 import { EmptyState, ErrorBox, Spinner } from '../components/Feedback'
-import { Stars } from '../components/Stars'
+import { GradeBadge } from '../components/GradeBadge'
 import { useAuth } from '../context/AuthContext'
 import { backend } from '../lib/api'
 import { formatDate, formatDateTime, formatSize, plural } from '../lib/format'
+import { gradeLabel, isOverdue } from '../lib/grades'
 import type { Assignment, Submission } from '../lib/types'
 
 type Filter = 'all' | 'todo' | 'sent' | 'graded'
@@ -89,6 +90,7 @@ export function StudentAssignmentsPage() {
       studentName: profile?.full_name,
       assignmentTitle: assignment?.title,
       groupName: profile?.group_name ?? undefined,
+      gradeType: assignment?.grade_type,
     }
   }, [reviewId, submissions, assignments, profile])
 
@@ -186,7 +188,8 @@ export function StudentAssignmentsPage() {
           {filtered.map((assignment) => {
             const submission = byAssignment.get(assignment.id)
             const graded = submission?.grade != null
-            const status = graded ? 'graded' : submission ? 'sent' : 'todo'
+            const overdue = !submission && isOverdue(assignment.due_at)
+            const status = graded ? 'graded' : submission ? 'sent' : overdue ? 'overdue' : 'todo'
             return (
               <article className={`assignment-card assignment-card--${status}`} key={assignment.id}>
                 <header className="assignment-card__head">
@@ -199,6 +202,10 @@ export function StudentAssignmentsPage() {
                       <>
                         <Clock3 size={13} /> На проверке
                       </>
+                    ) : overdue ? (
+                      <>
+                        <Clock3 size={13} /> Срочно сдать!
+                      </>
                     ) : (
                       <>
                         <FileUp size={13} /> Не сдано
@@ -209,6 +216,15 @@ export function StudentAssignmentsPage() {
                     <CalendarDays size={14} /> {formatDate(assignment.assigned_date)} ·{' '}
                     {assignment.lesson_number} пара
                   </span>
+                  {assignment.due_at ? (
+                    <span
+                      className={`assignment-card__date assignment-card__date--due ${
+                        overdue ? 'is-overdue' : ''
+                      }`}
+                    >
+                      <Clock3 size={14} /> до {formatDateTime(assignment.due_at)}
+                    </span>
+                  ) : null}
                 </header>
                 <h3>{assignment.title}</h3>
                 {assignment.description ? <p>{assignment.description}</p> : null}
@@ -228,9 +244,13 @@ export function StudentAssignmentsPage() {
 
                 {graded ? (
                   <div className="assignment-card__grade">
-                    <Stars value={submission.grade} size={18} />
+                    <GradeBadge
+                      grade={submission.grade}
+                      type={assignment.grade_type}
+                      size={18}
+                    />
                     <span>
-                      Оценка <strong>{submission.grade}</strong> из 5
+                      Оценка: <strong>{gradeLabel(assignment.grade_type, submission.grade)}</strong>
                     </span>
                   </div>
                 ) : null}
@@ -269,7 +289,7 @@ export function StudentAssignmentsPage() {
                       }}
                       data-testid={`submit-assignment-${assignment.id}`}
                     >
-                      <FileUp size={15} /> Сдать работу
+                      <FileUp size={15} /> {overdue ? 'Срочно сдать!' : 'Сдать работу'}
                     </button>
                   )}
                   {submission ? (

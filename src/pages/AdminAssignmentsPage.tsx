@@ -8,16 +8,16 @@ import {
   FolderOpen,
   RefreshCw,
   Search,
-  Star,
   Users,
 } from 'lucide-react'
 import { AppShell } from '../components/AppShell'
 import { ReviewDrawer } from '../components/ReviewDrawer'
 import { EmptyState, ErrorBox, Spinner } from '../components/Feedback'
-import { Stars } from '../components/Stars'
+import { GradeBadge } from '../components/GradeBadge'
 import { useToast } from '../context/ToastContext'
 import { backend } from '../lib/api'
 import { formatDateTime, formatSize, plural } from '../lib/format'
+import { isOverdue } from '../lib/grades'
 import type { Assignment, Group, Profile, WorkRow } from '../lib/types'
 
 export function AdminAssignmentsPage() {
@@ -110,6 +110,7 @@ export function AdminAssignmentsPage() {
         studentName: review.student.full_name,
         assignmentTitle: review.assignment.title,
         groupName,
+        gradeType: review.assignment.grade_type,
       }
     : undefined
 
@@ -269,6 +270,15 @@ export function AdminAssignmentsPage() {
                         <span className="muted">
                           выдано {row.assignment.assigned_date} · {row.assignment.lesson_number} пара
                         </span>
+                        {row.assignment.due_at ? (
+                          <span
+                            className={`works-due ${
+                              isOverdue(row.assignment.due_at) ? 'is-overdue' : ''
+                            }`}
+                          >
+                            до {formatDateTime(row.assignment.due_at)}
+                          </span>
+                        ) : null}
                       </td>
                       <td>
                         <span className="works-file">
@@ -282,11 +292,12 @@ export function AdminAssignmentsPage() {
                         <span className="muted">версия {row.submission.version}</span>
                       </td>
                       <td>
-                        {row.submission.grade ? (
-                          <span className="inline-grade">
-                            <Stars value={row.submission.grade} size={14} />
-                            <b>{row.submission.grade}</b>
-                          </span>
+                        {row.submission.grade != null ? (
+                          <GradeBadge
+                            grade={row.submission.grade}
+                            type={row.assignment.grade_type}
+                            size={14}
+                          />
                         ) : (
                           <span className="status-pill status-pill--sent">
                             <Clock3 size={13} /> На проверке
